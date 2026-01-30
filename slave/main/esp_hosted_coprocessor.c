@@ -1223,9 +1223,23 @@ esp_err_t esp_hosted_coprocessor_init(void)
 	return ESP_OK;
 }
 
+#include "esp_event.h"
+#include "esp_openthread.h"
+#include "esp_ot_config.h"
+#include "esp_vfs_eventfd.h"
+
+extern void otAppNcpInit(otInstance *instance);
+
 #ifdef CONFIG_ESP_HOSTED_COPROCESSOR_APP_MAIN
 void app_main(void)
 {
+    // Used eventfds:
+    // * ot task queue
+    // * radio driver
+    esp_vfs_eventfd_config_t eventfd_config = {
+        .max_fds = 2,
+    };
+
 	/* Initialize NVS */
 	esp_err_t ret = nvs_flash_init();
 
@@ -1235,8 +1249,21 @@ void app_main(void)
 		ret = nvs_flash_init();
 	}
 	ESP_ERROR_CHECK( ret );
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_ERROR_CHECK(esp_vfs_eventfd_register(&eventfd_config));
 
 	esp_hosted_coprocessor_init();
+
+    static esp_openthread_config_t config = {
+        .netif_config = {0},
+        .platform_config = {
+            .radio_config = ESP_OPENTHREAD_DEFAULT_RADIO_CONFIG(),
+            .host_config = ESP_OPENTHREAD_DEFAULT_HOST_CONFIG(),
+            .port_config = ESP_OPENTHREAD_DEFAULT_PORT_CONFIG(),
+        },
+    };
+
+    ESP_ERROR_CHECK(esp_openthread_start(&config));
 
 #ifdef CONFIG_ESP_HOSTED_NETWORK_SPLIT_ENABLED
 #ifdef ESP_HOSTED_COPROCESSOR_EXAMPLE_HTTP_CLIENT
